@@ -1,0 +1,60 @@
+How to install radius/mysql/apache/adminer for Guestshell
+
+yum -y install mariadb-server mariadb
+yum -y install freeradius freeradius-utils freeradius-mysql freeradius-sqlite
+
+systemctl start --now mariadb
+
+cat <<EOF > /tmp/create
+CREATE DATABASE radius;
+CREATE USER 'radius'@'localhost' IDENTIFIED BY 'radpass';
+GRANT ALL ON radius.* TO radius@localhost IDENTIFIED BY 'radpass';
+FLUSH PRIVILEGES;
+quit
+EOF
+mysql --verbose -u root -p  < /tmp/create
+
+
+mysql –-verbose -u radius -pradpass radius < /etc/raddb/mods-config/sql/main/mysql/schema.sql
+ln -s /etc/raddb/mods-available/sql /etc/raddb/mods-enabled/
+sed -i 's/#.*\(read_clients = yes\)/\1/' /etc/raddb/mods-available/sql
+
+
+
+vi /etc/raddb/mods-available/sql
+	Check radius password  (line #160)
+	Enable read_clients = yes [ie nas table] (line #323)
+	Replace dialect by mysql (lne #40)
+	Swap commentaires lines #61 and #62
+	Comment out mysql tls section (line #81)
+
+Vi /etc/raddb/users
+Disable Van-Jacobson compression line #183 (suppress the coma above)
+
+chgrp -h radiusd /etc/raddb/mods-enabled/sql
+
+systemctl enable --now radiusd.service
+
+
+dnf install httpd
+
+dnf install php php-common php-mysqlnd php-json php-xml php-mbstring php-gettext
+
+
+systemctl enable --now httpd
+
+mkdir /usr/share/adminer
+wget "https://www.adminer.org/latest.php"  -O /usr/share/adminer/latest.php
+ln -s /usr/share/adminer/latest.php /var/www/html/adminer.php
+
+
+echo "process.max = 12" >> /etc/php-fpm.conf
+
+vi /etc/php-fpm.d/www.conf
+pm.max_children = 10
+pm.start_servers = 2
+pm.min_spare_servers = 2
+pm.max_spare_servers = 10
+
+echo "MaxClients 1" >> /etc/httpd/conf.d/php.conf
+
